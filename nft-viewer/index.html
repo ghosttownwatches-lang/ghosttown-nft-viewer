@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Ghosttown Dynamic Watch</title>
+
+  <style>
+    body {
+      background: #ffffff;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    #watch {
+      position: relative;
+      width: 800px;
+      height: 800px;
+    }
+
+    .layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      transform-origin: 50% 50%;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="watch"></div>
+
+  <script>
+    async function init() {
+      // 1) ID del NFT (1-based)
+      const params = new URLSearchParams(window.location.search);
+      const id = parseInt(params.get("id") || "1", 10);
+
+      // 2) Cargar combinaciones SIN cachear
+      const res = await fetch("../output/combinations.json?cache=" + Date.now());
+      const combos = await res.json();
+      const nft = combos[id - 1];
+
+      if (!nft) {
+        console.error("NFT no encontrado para id =", id);
+        return;
+      }
+
+      const watch = document.getElementById("watch");
+
+      let dayImg = null;
+      const discLayers = [];
+      let serialDisc = null;
+      let windowCover = null;
+
+      // -------------------------------------------------
+      // 3) PRIMERO: CASE (capa base)
+      // -------------------------------------------------
+      if (nft.case) {
+        const caseImg = document.createElement("img");
+        caseImg.className = "layer";
+        caseImg.dataset.layer = "case";
+        caseImg.src = `../layers/Case/${nft.case}`;
+        watch.appendChild(caseImg);
+      }
+
+      // -------------------------------------------------
+      // 3.5) PREPARAR INFO DE BADGE (para discos)
+      // -------------------------------------------------
+      const badgeFile = nft.badges || "";
+      let discFolder = null;
+
+      if (badgeFile.startsWith("badge_boat")) {
+        discFolder = "badge_boat";
+      } else if (badgeFile.startsWith("badge_circus")) {
+        discFolder = "badge_circus";
+      } else if (badgeFile.startsWith("badge_haunted")) {
+        discFolder = "badge_haunted";
+      } else if (badgeFile.startsWith("badge_oldwest") || badgeFile.startsWith("badge_Oldwest")) {
+        discFolder = "badge_oldwest";
+      }
+
+      // -------------------------------------------------
+      // 4) DISCO SERIAL OLD WEST x/500 + WINDOW COVER
+      //    (inmediatamente después de case, ANTES de discs y days)
+      // -------------------------------------------------
+      if (nft.serial_file) {
+        // Disco Ghosttown x/500
+        serialDisc = document.createElement("img");
+        serialDisc.className = "layer";
+        serialDisc.id = "serial_disc";
+        serialDisc.src = `../layers/serials/oldwest/${nft.serial_file}`;
+        watch.appendChild(serialDisc);
+
+        // Window cover (estático, sin animación propia)
+        windowCover = document.createElement("img");
+        windowCover.className = "layer";
+        windowCover.id = "window_cover";
+        windowCover.src = "../layers/window_cover/window_cover.svg";
+        watch.appendChild(windowCover);
+      }
+
+      // -------------------------------------------------
+      // 5) DISCOS DE BADGE (delante de window_cover)
+      // -------------------------------------------------
+      if (discFolder) {
+        const basePath = `../layers/badges/discs/${discFolder}`;
+
+        // disc_1.svg (siempre existe)
+        const disc1 = document.createElement("img");
+        disc1.className = "layer";
+        disc1.id = "disc_1";
+        disc1.src = `${basePath}/disc_1.svg`;
+        watch.appendChild(disc1);
+        discLayers.push(disc1);
+
+        // disc_2.svg (puede existir o no)
+        try {
+          const checkDisc2 = await fetch(`${basePath}/disc_2.svg`, { method: "HEAD" });
+          if (checkDisc2.ok) {
+            const disc2 = document.createElement("img");
+            disc2.className = "layer";
+            disc2.id = "disc_2";
+            disc2.src = `${basePath}/disc_2.svg`;
+            watch.appendChild(disc2);
+            discLayers.push(disc2);
+          }
+        } catch (e) {
+          console.warn("disc_2.svg no encontrado para", discFolder);
+        }
+      }
+
+      // -------------------------------------------------
+      // 6) RESTO DE CAPAS ESTÁTICAS
+      // -------------------------------------------------
+      const staticOrder = [
+        "days",
+        "base_dial",
+        "dial_detail",
+        "bezel",
+        "badges",
+        "markers"
+      ];
+
+      const folderMap = {
+        "days": "days",
+        "base_dial": "base_dial",
+        "dial_detail": "dial_detail",
+        "bezel": "bezel",
+        "badges": "badges",
+        "markers": "markers"
+      };
+
+      const hauntedBadges = [
+        "badge_haunted_classic.svg",
+        "badge_haunted_rare.svg",
+        "badge_haunted_yellow.svg"
+      ];
+
+      for (const layerName of staticOrder) {
+        const file = nft[layerName];
+        if (!file) continue;
+
+        let folder = folderMap[layerName] || layerName;
+
+        // REGLA ESPECIAL: base_dial → base_dial/haunted si el badge es haunted
+        if (layerName === "base_dial" && hauntedBadges.includes(badgeFile)) {
+          folder = "base_dial/haunted";
+        }
+
+        const img = document.createElement("img");
+        img.className = "layer";
+        img.dataset.layer = layerName;
+        img.src = `../layers/${folder}/${file}`;
+        watch.appendChild(img);
+
+        if (layerName === "days") {
+          dayImg = img;
+        }
+      }
+
+      // -------------------------------------------------
+      // 7) AGUJAS (horas, minutos, segundos)
+      // -------------------------------------------------
+      const handSet = nft.hands_set || "rooster";
+
+      const handFiles = {
+        hourShadow: "hour_shadow.svg",
+        hour: "hour.svg",
+        minuteShadow: "minute_shadow.svg",
+        minute: "minute.svg",
+        secondShadow: "second_shadow.svg",
+        second: "second.svg"
+      };
+
+      const handOrder = [
+        "hourShadow",
+        "hour",
+        "minuteShadow",
+        "minute",
+        "secondShadow",
+        "second"
+      ];
+
+      const hands = {};
+
+      for (const key of handOrder) {
+        const img = document.createElement("img");
+        img.className = "layer";
+        img.id = key;
+        img.src = `../layers/hands/${handSet}/${handFiles[key]}`;
+        watch.appendChild(img);
+        hands[key] = img;
+      }
+
+      // -------------------------------------------------
+      // 8) ACTUALIZAR: hora, fecha y discos animados
+      // -------------------------------------------------
+      function updateTime() {
+        const now = new Date();
+
+        // --- Agujas ---
+        const h = now.getHours() % 12;
+        const m = now.getMinutes();
+        const s = now.getSeconds();
+
+        const hourAngle = (h + m / 60) * 30;
+        const minuteAngle = (m + s / 60) * 6;
+        const secondAngle = s * 6;
+
+        if (hands.hourShadow)   hands.hourShadow.style.transform   = `rotate(${hourAngle}deg)`;
+        if (hands.hour)         hands.hour.style.transform         = `rotate(${hourAngle}deg)`;
+        if (hands.minuteShadow) hands.minuteShadow.style.transform = `rotate(${minuteAngle}deg)`;
+        if (hands.minute)       hands.minute.style.transform       = `rotate(${minuteAngle}deg)`;
+        if (hands.secondShadow) hands.secondShadow.style.transform = `rotate(${secondAngle}deg)`;
+        if (hands.second)       hands.second.style.transform       = `rotate(${secondAngle}deg)`;
+
+        // --- Disco de fecha ---
+        if (dayImg) {
+          const DAYS_PER_DISK = 31;
+          const CORR_DAYS = 7; // offset para alinear el 25 físico y mostrar el día real
+
+          const day = now.getDate(); // 1..31
+          const index = (day + CORR_DAYS - 1 + DAYS_PER_DISK) % DAYS_PER_DISK;
+          const angle = -(index * (360 / DAYS_PER_DISK));
+          dayImg.style.transform = `rotate(${angle}deg)`;
+        }
+
+        // --- Discos animados (badge discs) ---
+        // Mantienen su animación original: 360°/10s, uno antihorario, otro horario
+        if (discLayers.length > 0) {
+          const t = now.getTime() / 1000; // segundos
+          const baseAngle = (t % 10) * 36; // 360° cada 10 segundos
+
+          const disc1 = document.getElementById("disc_1");
+          if (disc1) disc1.style.transform = `rotate(${-baseAngle}deg)`; // antihorario
+
+          const disc2 = document.getElementById("disc_2");
+          if (disc2) disc2.style.transform = `rotate(${baseAngle}deg)`;  // horario
+        }
+
+        // --- Disco serial OLD WEST x/500 ---
+        // Gira 360° cada 15 segundos en sentido horario
+        if (serialDisc) {
+          const tSerial = now.getTime() / 1000;
+          const angleSerial = (tSerial % 15) * 24; // 360 / 15
+          serialDisc.style.transform = `rotate(${angleSerial}deg)`;
+        }
+      }
+
+      updateTime();
+      setInterval(updateTime, 100);
+    }
+
+    init();
+  </script>
+</body>
+</html>
