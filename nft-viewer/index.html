@@ -43,7 +43,7 @@
       const id = parseInt(params.get("id") || "1", 10);
 
       // 2) Cargar combinaciones SIN cachear
-      const res = await fetch("../output/combinations.json?cache=" + Date.now());
+      const res = await fetch("output/combinations.json?cache=" + Date.now());
       const combos = await res.json();
       const nft = combos[id - 1];
 
@@ -282,3 +282,4 @@
   </script>
 </body>
 </html>
+
